@@ -1,7 +1,8 @@
 import time
 import digitalio
 
-HOLD_TIME = 0.8  # seconds
+HOLD_TIME = 0.8   # seconds
+COMBO_TIME = 0.05 # seconds — window for simultaneous press detection
 
 class Whitestar:
     def __init__(self, pins):
@@ -11,6 +12,8 @@ class Whitestar:
         self._last_debounce = [0] * len(pins)
         self._press_start = [0] * len(pins)
         self._hold_fired = [False] * len(pins)
+        self._pending_press = None
+        self._pending_time = 0
 
         for p in pins:
             io = digitalio.DigitalInOut(p)
@@ -28,12 +31,14 @@ class Whitestar:
     def update(self):
         """
         Processes one full cycle of the matrix.
-        Returns (press, hold):
+        Returns (press, hold, combo):
             press - index of a newly pressed switch, or None
             hold  - index of a newly held switch, or None
+            combo - tuple (a, b) of two simultaneously pressed switches, or None
         """
         new_press = None
         new_hold = None
+        combo = None
 
         for i in range(len(self._ios)):
             # --- 1. SENSE ---
@@ -75,4 +80,23 @@ class Whitestar:
                 self._ios[i].direction = digitalio.Direction.OUTPUT
                 self._ios[i].value = False # Active Grounding
 
-        return new_press, new_hold
+        # Combo detection: buffer presses and check for a second within COMBO_TIME
+        if new_press is not None:
+            if self._pending_press is not None:
+                # Second press within window — combo
+                combo = (self._pending_press, new_press)
+                self._pending_press = None
+                new_press = None
+            else:
+                # Buffer this press
+                self._pending_press = new_press
+                self._pending_time = time.monotonic()
+                new_press = None
+
+        # Flush pending press if combo window expired
+        if self._pending_press is not None and combo is None:
+            if (time.monotonic() - self._pending_time) >= COMBO_TIME:
+                new_press = self._pending_press
+                self._pending_press = None
+
+        return new_press, new_hold, combo
