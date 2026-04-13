@@ -5,7 +5,7 @@ HOLD_TIME = 0.8   # seconds
 COMBO_TIME = 0.05 # seconds — window for simultaneous press detection
 
 class Whitestar:
-    def __init__(self, pins):
+    def __init__(self, pins, hold_buttons=None):
         self._ios = []
         self._states = [False] * len(pins)
         self._last_vals = [True] * len(pins)
@@ -14,6 +14,7 @@ class Whitestar:
         self._hold_fired = [False] * len(pins)
         self._pending_press = None
         self._pending_time = 0
+        self._hold_buttons = set(hold_buttons or [])
 
         for p in pins:
             io = digitalio.DigitalInOut(p)
@@ -52,7 +53,8 @@ class Whitestar:
             # Falling edge — button just pressed
             if current_val == False and self._last_vals[i] == True:
                 if (now - self._last_debounce[i]) > 0.15:
-                    new_press = i
+                    if i not in self._hold_buttons:
+                        new_press = i
                     self._press_start[i] = now
                     self._hold_fired[i] = False
                     self._last_debounce[i] = now
@@ -63,8 +65,10 @@ class Whitestar:
                     new_hold = i
                     self._hold_fired[i] = True
 
-            # Released — reset
-            if current_val == True:
+            # Released — fire press on release for hold buttons (if hold didn't fire)
+            if current_val == True and self._press_start[i] > 0:
+                if i in self._hold_buttons and not self._hold_fired[i]:
+                    new_press = i
                 self._press_start[i] = 0
                 self._hold_fired[i] = False
 
