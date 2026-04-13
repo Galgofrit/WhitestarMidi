@@ -2,6 +2,9 @@ import board
 import whitestar
 
 class MODE:
+    # Preset: Pressing a switch turns on its LED and turns off all other preset LEDs.
+    # Toggle: Pressing a switch toggles its LED on/off without affecting other switches.
+    # Can be used for every switch individually.
     PRESET = 0
     TOGGLE = 1
 
@@ -10,8 +13,8 @@ SWITCH_MODES = {
     2: MODE.PRESET,
     3: MODE.PRESET,
     4: MODE.PRESET,
-    5: MODE.TOGGLE,
-    6: MODE.TOGGLE,
+    5: MODE.PRESET,
+    6: MODE.PRESET,
 }
 
 TUNER_SWITCH = 6
