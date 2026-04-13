@@ -1,5 +1,10 @@
 import board
+import usb_midi
+import adafruit_midi
+from adafruit_midi.control_change import ControlChange
 import whitestar
+
+midi = adafruit_midi.MIDI(midi_out=usb_midi.ports[1], out_channel=0)
 
 class MODE:
     # Preset: Pressing a switch turns on its LED and turns off all other preset LEDs.
@@ -25,15 +30,22 @@ ws = whitestar.Whitestar(MY_PINS)
 tuner_mode = False
 saved_leds = [False] * 6
 
+def send_midi(sw, val=127):
+    midi.send(ControlChange(sw, val))
+    print(f"MIDI CC {sw} -> {val}")
+
 def handle_preset(sw):
     for num, mode in SWITCH_MODES.items():
         if mode == MODE.PRESET:
             ws.set_led(num - 1, False)
     ws.set_led(sw, True)
+    send_midi(sw + 1)
     print(f"Whitestar Preset: {sw + 1}")
 
 def handle_toggle(sw):
     ws.set_led(sw, not ws.get_led(sw))
+    val = 127 if ws.get_led(sw) else 0
+    send_midi(sw + 1, val)
     print(f"Whitestar Toggle {sw + 1}: {'ON' if ws.get_led(sw) else 'OFF'}")
 
 def enter_tuner():
