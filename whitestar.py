@@ -1,12 +1,16 @@
 import time
 import digitalio
 
+HOLD_TIME = 0.8  # seconds
+
 class Whitestar:
     def __init__(self, pins):
         self._ios = []
         self._states = [False] * len(pins)
         self._last_vals = [True] * len(pins)
         self._last_debounce = [0] * len(pins)
+        self._press_start = [0] * len(pins)
+        self._hold_fired = [False] * len(pins)
 
         for p in pins:
             io = digitalio.DigitalInOut(p)
@@ -24,9 +28,12 @@ class Whitestar:
     def update(self):
         """
         Processes one full cycle of the matrix.
-        Returns the index of a newly pressed switch, or None.
+        Returns (press, hold):
+            press - index of a newly pressed switch, or None
+            hold  - index of a newly held switch, or None
         """
         new_press = None
+        new_hold = None
 
         for i in range(len(self._ios)):
             # --- 1. SENSE ---
@@ -35,12 +42,26 @@ class Whitestar:
 
             # Raw read
             current_val = self._ios[i].value
+            now = time.monotonic()
 
-            # Edge detection
+            # Falling edge — button just pressed
             if current_val == False and self._last_vals[i] == True:
-                if (time.monotonic() - self._last_debounce[i]) > 0.15:
+                if (now - self._last_debounce[i]) > 0.15:
                     new_press = i
-                    self._last_debounce[i] = time.monotonic()
+                    self._press_start[i] = now
+                    self._hold_fired[i] = False
+                    self._last_debounce[i] = now
+
+            # Still held — check for hold threshold
+            if current_val == False and not self._hold_fired[i] and self._press_start[i] > 0:
+                if (now - self._press_start[i]) >= HOLD_TIME:
+                    new_hold = i
+                    self._hold_fired[i] = True
+
+            # Released — reset
+            if current_val == True:
+                self._press_start[i] = 0
+                self._hold_fired[i] = False
 
             self._last_vals[i] = current_val
 
@@ -54,4 +75,4 @@ class Whitestar:
                 self._ios[i].direction = digitalio.Direction.OUTPUT
                 self._ios[i].value = False # Active Grounding
 
-        return new_press
+        return new_press, new_hold
