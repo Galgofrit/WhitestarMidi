@@ -28,7 +28,7 @@ def send_midi(sw, val=127):
 
 SCENE_CC = 43
 PAGE_CC = 64
-SCENE_NAMES = ["A(I)", "B(I)", "C(I)", "D(I)", "A(II)", "B(II)"]
+SCENE_NAMES = ["A(I)", "B(I)", "C(I)", "D(I)", "A(II)", "B(II)", "C(II)", "D(II)"]
 
 def handle_scene(sw):
     for i in range(6):
@@ -84,8 +84,17 @@ ws.on_press(6, handle_scene)
 
 ws.on_hold(TUNER_SWITCH, enter_tuner)
 
-ws.on_combo((4, 5), lambda a, b: (send_midi(7), print("Whitestar Virtual Button 7 (combo 4+5)")))
-ws.on_combo((5, 6), lambda a, b: (send_midi(8), print("Whitestar Virtual Button 8 (combo 5+6)")))
+def handle_combo_scene(sw_a, sw_b, scene_val):
+    for i in range(6):
+        ws.set_led(i, False)
+    ws.set_led(sw_a, True)
+    ws.set_led(sw_b, True)
+    midi_send(ControlChange(SCENE_CC, scene_val))
+    midi_send(ControlChange(PAGE_CC, 127))
+    print(f"Whitestar Scene {SCENE_NAMES[scene_val]}")
+
+ws.on_combo((4, 5), lambda a, b: handle_combo_scene(a, b, 6))
+ws.on_combo((5, 6), lambda a, b: handle_combo_scene(a, b, 7))
 
 # --- Start ---
 

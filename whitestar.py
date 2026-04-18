@@ -15,6 +15,7 @@ class Whitestar:
         self._pending_press = None
         self._pending_time = 0
         self._hold_buttons = set(hold_buttons or [])
+        self._combo_consumed = [False] * len(pins)
         self._count = len(pins)
 
         self._press_handlers = {}
@@ -56,6 +57,7 @@ class Whitestar:
         new_press = None
         new_hold = None
         combo = None
+        release_press = None
 
         for i in range(self._count):
             # --- 1. SENSE ---
@@ -68,8 +70,7 @@ class Whitestar:
             # Falling edge — button just pressed
             if current_val == False and self._last_vals[i] == True:
                 if (now - self._last_debounce[i]) > 0.15:
-                    if i not in self._hold_buttons:
-                        new_press = i
+                    new_press = i
                     self._press_start[i] = now
                     self._hold_fired[i] = False
                     self._last_debounce[i] = now
@@ -82,10 +83,11 @@ class Whitestar:
 
             # Released — fire press on release for hold buttons (if hold didn't fire)
             if current_val == True and self._press_start[i] > 0:
-                if i in self._hold_buttons and not self._hold_fired[i]:
-                    new_press = i
+                if i in self._hold_buttons and not self._hold_fired[i] and not self._combo_consumed[i]:
+                    release_press = i
                 self._press_start[i] = 0
                 self._hold_fired[i] = False
+                self._combo_consumed[i] = False
 
             self._last_vals[i] = current_val
 
@@ -102,6 +104,8 @@ class Whitestar:
         if new_press is not None:
             if self._pending_press is not None:
                 combo = (self._pending_press, new_press)
+                self._combo_consumed[self._pending_press] = True
+                self._combo_consumed[new_press] = True
                 self._pending_press = None
                 new_press = None
             else:
@@ -111,8 +115,16 @@ class Whitestar:
 
         if self._pending_press is not None and combo is None:
             if (time.monotonic() - self._pending_time) >= COMBO_TIME:
-                new_press = self._pending_press
-                self._pending_press = None
+                # Hold buttons only fire on release, not here
+                if self._pending_press in self._hold_buttons:
+                    self._pending_press = None
+                else:
+                    new_press = self._pending_press
+                    self._pending_press = None
+
+        # Release press bypasses combo buffer
+        if release_press is not None and new_press is None:
+            new_press = release_press
 
         return new_press, new_hold, combo
 
