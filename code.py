@@ -1,11 +1,14 @@
 import board
+import busio
 import usb_midi
 import adafruit_midi
 from adafruit_midi.control_change import ControlChange
 import whitestar
 import startup
 
-midi = adafruit_midi.MIDI(midi_out=usb_midi.ports[1], out_channel=0)
+uart = busio.UART(tx=board.GP0, baudrate=31250)
+midi_usb = adafruit_midi.MIDI(midi_out=usb_midi.ports[1], out_channel=0)
+midi_trs = adafruit_midi.MIDI(midi_out=uart, out_channel=0)
 
 TUNER_SWITCH = 6
 MY_PINS = [board.GP2, board.GP3, board.GP4, board.GP5, board.GP6, board.GP7]
@@ -13,20 +16,27 @@ ws = whitestar.Whitestar(MY_PINS, hold_buttons=[TUNER_SWITCH - 1])
 
 # --- MIDI ---
 
+def midi_send(msg):
+    midi_usb.send(msg)
+    midi_trs.send(msg)
+
 def send_midi(sw, val=127):
-    midi.send(ControlChange(sw, val))
+    midi_send(ControlChange(sw, val))
     print(f"MIDI CC {sw} -> {val}")
 
 # --- Button Handlers ---
 
 SCENE_CC = 43
+PAGE_CC = 64
 SCENE_NAMES = ["A(I)", "B(I)", "C(I)", "D(I)", "A(II)", "B(II)"]
 
 def handle_scene(sw):
     for i in range(6):
         ws.set_led(i, False)
     ws.set_led(sw, True)
-    midi.send(ControlChange(SCENE_CC, sw))
+    midi_send(ControlChange(SCENE_CC, sw))
+    page_val = 127 if sw >= 4 else 0
+    midi_send(ControlChange(PAGE_CC, page_val))
     print(f"Whitestar Scene {SCENE_NAMES[sw]}")
 
 def handle_toggle(sw):
@@ -48,7 +58,7 @@ def enter_tuner():
     saved_leds = [ws.get_led(i) for i in range(6)]
     for i in range(6):
         ws.set_led(i, True)
-    midi.send(ControlChange(TUNER_CC, 127))
+    midi_send(ControlChange(TUNER_CC, 127))
     print("Tuner Mode: ON")
 
 def exit_tuner():
@@ -56,7 +66,7 @@ def exit_tuner():
     tuner_mode = False
     for i in range(6):
         ws.set_led(i, saved_leds[i])
-    midi.send(ControlChange(TUNER_CC, 0))
+    midi_send(ControlChange(TUNER_CC, 0))
     print("Tuner Mode: OFF")
 
 def before_press(sw):
