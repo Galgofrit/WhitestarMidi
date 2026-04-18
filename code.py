@@ -3,41 +3,25 @@ import usb_midi
 import adafruit_midi
 from adafruit_midi.control_change import ControlChange
 import whitestar
+import startup
 
 midi = adafruit_midi.MIDI(midi_out=usb_midi.ports[1], out_channel=0)
 
-class MODE:
-    # Preset: Pressing a switch turns on its LED and turns off all other preset LEDs.
-    # Toggle: Pressing a switch toggles its LED on/off without affecting other switches.
-    # Can be used for every switch individually.
-    PRESET = 0
-    TOGGLE = 1
-
-SWITCH_MODES = {
-    1: MODE.PRESET,
-    2: MODE.PRESET,
-    3: MODE.PRESET,
-    4: MODE.PRESET,
-    5: MODE.PRESET,
-    6: MODE.PRESET,
-}
-
 TUNER_SWITCH = 6
-
 MY_PINS = [board.GP2, board.GP3, board.GP4, board.GP5, board.GP6, board.GP7]
 ws = whitestar.Whitestar(MY_PINS, hold_buttons=[TUNER_SWITCH - 1])
 
-tuner_mode = False
-saved_leds = [False] * 6
+# --- MIDI ---
 
 def send_midi(sw, val=127):
     midi.send(ControlChange(sw, val))
     print(f"MIDI CC {sw} -> {val}")
 
+# --- Button Handlers ---
+
 def handle_preset(sw):
-    for num, mode in SWITCH_MODES.items():
-        if mode == MODE.PRESET:
-            ws.set_led(num - 1, False)
+    for i in range(6):
+        ws.set_led(i, False)
     ws.set_led(sw, True)
     send_midi(sw + 1)
     print(f"Whitestar Preset: {sw + 1}")
@@ -48,19 +32,10 @@ def handle_toggle(sw):
     send_midi(sw + 1, val)
     print(f"Whitestar Toggle {sw + 1}: {'ON' if ws.get_led(sw) else 'OFF'}")
 
-COMBOS = {
-    (4, 5): 7,
-    (5, 6): 8,
-}
+# --- Tuner Mode ---
 
-def handle_combo(a, b):
-    key = tuple(sorted((a + 1, b + 1)))
-    if key in COMBOS:
-        virt = COMBOS[key]
-        send_midi(virt)
-        print(f"Whitestar Virtual Button {virt} (combo {key[0]}+{key[1]})")
-    else:
-        print(f"Whitestar Combo: {a + 1} + {b + 1} (unmapped)")
+tuner_mode = False
+saved_leds = [False] * 6
 
 def enter_tuner():
     global tuner_mode, saved_leds
@@ -77,26 +52,26 @@ def exit_tuner():
         ws.set_led(i, saved_leds[i])
     print("Tuner Mode: OFF")
 
-# Starting State
+def before_press(sw):
+    if tuner_mode:
+        exit_tuner()
+
+# --- Register Callbacks ---
+
+ws.on_press(1, handle_preset)
+ws.on_press(2, handle_preset)
+ws.on_press(3, handle_preset)
+ws.on_press(4, handle_preset)
+ws.on_press(5, handle_preset)
+ws.on_press(6, handle_preset)
+
+ws.on_hold(TUNER_SWITCH, enter_tuner)
+
+ws.on_combo((4, 5), lambda a, b: (send_midi(7), print("Whitestar Virtual Button 7 (combo 4+5)")))
+ws.on_combo((5, 6), lambda a, b: (send_midi(8), print("Whitestar Virtual Button 8 (combo 5+6)")))
+
+# --- Start ---
+
+startup.boot_animation(ws)
 ws.set_led(0, True)
-
-while True:
-    sw, hold, combo = ws.update()
-
-    if combo is not None:
-        handle_combo(*combo)
-        continue
-
-    if hold is not None and hold + 1 == TUNER_SWITCH and not tuner_mode:
-        enter_tuner()
-        continue
-
-    if sw is not None:
-        if tuner_mode:
-            exit_tuner()
-
-        sw_num = sw + 1
-        if SWITCH_MODES[sw_num] == MODE.PRESET:
-            handle_preset(sw)
-        elif SWITCH_MODES[sw_num] == MODE.TOGGLE:
-            handle_toggle(sw)
+ws.run(before_press=before_press)
