@@ -19,12 +19,15 @@ def send_midi(sw, val=127):
 
 # --- Button Handlers ---
 
-def handle_preset(sw):
+SCENE_CC = 43
+SCENE_NAMES = ["A(I)", "B(I)", "C(I)", "D(I)", "A(II)", "B(II)"]
+
+def handle_scene(sw):
     for i in range(6):
         ws.set_led(i, False)
     ws.set_led(sw, True)
-    send_midi(sw + 1)
-    print(f"Whitestar Preset: {sw + 1}")
+    midi.send(ControlChange(SCENE_CC, sw))
+    print(f"Whitestar Scene {SCENE_NAMES[sw]}")
 
 def handle_toggle(sw):
     ws.set_led(sw, not ws.get_led(sw))
@@ -37,12 +40,15 @@ def handle_toggle(sw):
 tuner_mode = False
 saved_leds = [False] * 6
 
+TUNER_CC = 45
+
 def enter_tuner():
     global tuner_mode, saved_leds
     tuner_mode = True
     saved_leds = [ws.get_led(i) for i in range(6)]
     for i in range(6):
         ws.set_led(i, True)
+    midi.send(ControlChange(TUNER_CC, 127))
     print("Tuner Mode: ON")
 
 def exit_tuner():
@@ -50,6 +56,7 @@ def exit_tuner():
     tuner_mode = False
     for i in range(6):
         ws.set_led(i, saved_leds[i])
+    midi.send(ControlChange(TUNER_CC, 0))
     print("Tuner Mode: OFF")
 
 def before_press(sw):
@@ -58,12 +65,12 @@ def before_press(sw):
 
 # --- Register Callbacks ---
 
-ws.on_press(1, handle_preset)
-ws.on_press(2, handle_preset)
-ws.on_press(3, handle_preset)
-ws.on_press(4, handle_preset)
-ws.on_press(5, handle_preset)
-ws.on_press(6, handle_preset)
+ws.on_press(1, handle_scene)
+ws.on_press(2, handle_scene)
+ws.on_press(3, handle_scene)
+ws.on_press(4, handle_scene)
+ws.on_press(5, handle_scene)
+ws.on_press(6, handle_scene)
 
 ws.on_hold(TUNER_SWITCH, enter_tuner)
 
