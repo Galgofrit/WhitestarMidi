@@ -57,7 +57,7 @@ def enter_tuner():
     tuner_mode = True
     saved_leds = [ws.get_led(i) for i in range(6)]
     for i in range(6):
-        ws.set_led(i, True)
+        ws.set_led(i, False)
     midi_send(ControlChange(TUNER_CC, 127))
     print("Tuner Mode: ON")
 
