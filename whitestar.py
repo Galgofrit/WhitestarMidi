@@ -1,8 +1,9 @@
 import time
 import digitalio
 
-HOLD_TIME = 0.8   # seconds
-COMBO_TIME = 0.05 # seconds — window for simultaneous press detection
+HOLD_TIME = 0.8    # seconds
+COMBO_TIME = 0.05  # seconds — window for simultaneous press detection
+LED_SLOT = 0.0015  # seconds per LED — fixed slot time, brightness sets the duty cycle within it
 
 class Whitestar:
     def __init__(self, pins, hold_buttons=None):
@@ -29,10 +30,16 @@ class Whitestar:
             self._ios.append(io)
 
     def set_led(self, index, val):
-        self._states[index] = val
+        # val: True/False or float 0.0–1.0 for brightness
+        if val is True:
+            self._states[index] = 1.0
+        elif val is False:
+            self._states[index] = 0.0
+        else:
+            self._states[index] = max(0.0, min(1.0, val))
 
     def get_led(self, index):
-        return self._states[index]
+        return self._states[index] > 0
 
     def on_press(self, sw_num, handler):
         self._press_handlers[sw_num] = handler
@@ -45,13 +52,13 @@ class Whitestar:
 
     def _drive(self):
         for i in range(self._count):
-            if self._states[i]:
-                self._ios[i].direction = digitalio.Direction.OUTPUT
+            self._ios[i].direction = digitalio.Direction.OUTPUT
+            on_time = LED_SLOT * self._states[i]
+            if on_time > 0:
                 self._ios[i].value = True
-                time.sleep(0.003)
-            else:
-                self._ios[i].direction = digitalio.Direction.OUTPUT
+                time.sleep(on_time)
                 self._ios[i].value = False
+            time.sleep(LED_SLOT - on_time)
 
     def _scan(self):
         new_press = None
@@ -92,13 +99,13 @@ class Whitestar:
             self._last_vals[i] = current_val
 
             # --- 2. DRIVE / GHOST KILL ---
-            if self._states[i]:
-                self._ios[i].direction = digitalio.Direction.OUTPUT
+            self._ios[i].direction = digitalio.Direction.OUTPUT
+            on_time = LED_SLOT * self._states[i]
+            if on_time > 0:
                 self._ios[i].value = True
-                time.sleep(0.003)
-            else:
-                self._ios[i].direction = digitalio.Direction.OUTPUT
+                time.sleep(on_time)
                 self._ios[i].value = False
+            time.sleep(LED_SLOT - on_time)
 
         # Combo detection
         if new_press is not None:

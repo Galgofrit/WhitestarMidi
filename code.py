@@ -11,6 +11,8 @@ midi_usb = adafruit_midi.MIDI(midi_out=usb_midi.ports[1], out_channel=0)
 midi_trs = adafruit_midi.MIDI(midi_out=uart, out_channel=0)
 
 TUNER_SWITCH = 6
+NORMAL_BRIGHTNESS = 0.72
+TUNER_BRIGHTNESS = 0.3
 MY_PINS = [board.GP2, board.GP3, board.GP4, board.GP5, board.GP6, board.GP7]
 ws = whitestar.Whitestar(MY_PINS, hold_buttons=[TUNER_SWITCH - 1])
 
@@ -33,7 +35,7 @@ SCENE_NAMES = ["A(I)", "B(I)", "C(I)", "D(I)", "A(II)", "B(II)", "C(II)", "D(II)
 def handle_scene(sw):
     for i in range(6):
         ws.set_led(i, False)
-    ws.set_led(sw, True)
+    ws.set_led(sw, NORMAL_BRIGHTNESS)
     midi_send(ControlChange(SCENE_CC, sw))
     page_val = 127 if sw >= 4 else 0
     midi_send(ControlChange(PAGE_CC, page_val))
@@ -57,7 +59,7 @@ def enter_tuner():
     tuner_mode = True
     saved_leds = [ws.get_led(i) for i in range(6)]
     for i in range(6):
-        ws.set_led(i, False)
+        ws.set_led(i, TUNER_BRIGHTNESS)
     midi_send(ControlChange(TUNER_CC, 127))
     print("Tuner Mode: ON")
 
@@ -65,7 +67,7 @@ def exit_tuner():
     global tuner_mode
     tuner_mode = False
     for i in range(6):
-        ws.set_led(i, saved_leds[i])
+        ws.set_led(i, NORMAL_BRIGHTNESS if saved_leds[i] else False)
     midi_send(ControlChange(TUNER_CC, 0))
     print("Tuner Mode: OFF")
 
@@ -87,8 +89,8 @@ ws.on_hold(TUNER_SWITCH, enter_tuner)
 def handle_combo_scene(sw_a, sw_b, scene_val):
     for i in range(6):
         ws.set_led(i, False)
-    ws.set_led(sw_a, True)
-    ws.set_led(sw_b, True)
+    ws.set_led(sw_a, NORMAL_BRIGHTNESS)
+    ws.set_led(sw_b, NORMAL_BRIGHTNESS)
     midi_send(ControlChange(SCENE_CC, scene_val))
     midi_send(ControlChange(PAGE_CC, 127))
     print(f"Whitestar Scene {SCENE_NAMES[scene_val]}")
@@ -98,6 +100,7 @@ ws.on_combo((5, 6), lambda a, b: handle_combo_scene(a, b, 7))
 
 # --- Start ---
 
+startup.check_wifi_mode(ws)
 startup.boot_animation(ws)
-ws.set_led(0, True)
+ws.set_led(0, NORMAL_BRIGHTNESS)
 ws.run(before_press=before_press)
