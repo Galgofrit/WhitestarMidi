@@ -2,8 +2,9 @@ import time
 import digitalio
 import supervisor
 
-WIFI_SSID = "Galgo"
-WIFI_PASSWORD = "motekmotek"
+NETWORKS = [
+    ("Test-Network", "testtest"),
+]
 SYNC_PORT = 8080
 _mdns_server = None
 
@@ -31,7 +32,7 @@ def check_wifi_mode(ws):
         import wifi
         import socketpool
 
-        print(f"WiFi mode: connecting to {WIFI_SSID}...")
+        print(f"WiFi mode: trying {len(NETWORKS)} networks...")
         ws.set_led(1, True)
         blink_on = True
         last_blink = time.monotonic()
@@ -72,10 +73,30 @@ def check_wifi_mode(ws):
                     wifi.radio.start_station()
                 except Exception:
                     pass
+                # Scan for visible networks
+                visible = set()
                 try:
-                    wifi.radio.connect(WIFI_SSID, WIFI_PASSWORD, timeout=10)
+                    for net in wifi.radio.start_scanning_networks():
+                        visible.add(net.ssid)
                 except Exception as e:
-                    print(f"Connect failed (attempt {attempts}/{MAX_ATTEMPTS}): {e}")
+                    print(f"  scan failed: {e}")
+                finally:
+                    try:
+                        wifi.radio.stop_scanning_networks()
+                    except Exception:
+                        pass
+                # Try only known networks that are visible, in priority order
+                for ssid, password in NETWORKS:
+                    if wifi.radio.ipv4_address is not None:
+                        break
+                    if ssid not in visible:
+                        print(f"  {ssid}: not visible")
+                        continue
+                    try:
+                        print(f"  trying {ssid}...")
+                        wifi.radio.connect(ssid, password, timeout=8)
+                    except Exception as e:
+                        print(f"  {ssid}: {e}")
                 if wifi.radio.ipv4_address is None and attempts >= MAX_ATTEMPTS:
                     # Make sure the marker stays so we re-enter WiFi mode
                     try:
@@ -148,7 +169,9 @@ def handle(conn, buf):
     parts = first.decode().split(" ", 1)
     cmd = parts[0]
 
-    if cmd == "RST":
+    if cmd == "PING":
+        conn.send(b"OK\n")
+    elif cmd == "RST":
         # Write marker so boot stays in WiFi mode without holding switch 1
         try:
             with open("/wifi_pending", "w") as f:

@@ -5,11 +5,13 @@ Defaults to whitestar.local. Override with --host <ip-or-name>.
 
 Usage:
     ./push.py <file> [<file> ...]         # upload files
-    ./push.py --reset                     # restart the device
+    ./push.py --reset                     # restart and wait for reconnect
+    ./push.py --ping                      # check the device is up
     ./push.py --ls [path]                 # list files
     ./push.py --cat <path>                # print file contents
     ./push.py --host <ip> <file> ...      # use a specific host
 """
+import time
 import socket
 import sys
 import os
@@ -29,6 +31,28 @@ def send(host, payload, all_data=False):
                 chunks.append(chunk)
             return b"".join(chunks).decode()
         return s.recv(4096).decode().strip()
+
+def ping(host, timeout=2, verbose=False):
+    try:
+        with socket.create_connection((host, PORT), timeout=timeout) as s:
+            s.sendall(b"PING\n\n")
+            return s.recv(64).decode().strip() == "OK"
+    except Exception as e:
+        if verbose:
+            print(f"ping error: {e}")
+        return False
+
+def wait_for_reconnect(host, timeout=60):
+    print(f"Waiting for {host} to come back...", end="", flush=True)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if ping(host):
+            print(" up")
+            return True
+        print(".", end="", flush=True)
+        time.sleep(1)
+    print(" timeout")
+    return False
 
 def push(host, path):
     name = os.path.basename(path)
@@ -54,6 +78,10 @@ if __name__ == "__main__":
     op = args[0]
     if op == "--reset" or op == "--restart":
         print(send(host, b"RST\n\n"))
+        time.sleep(2)  # give device time to actually start resetting
+        wait_for_reconnect(host)
+    elif op == "--ping":
+        print("OK" if ping(host, verbose=True) else "DOWN")
     elif op == "--ls":
         path = args[1] if len(args) > 1 else "/"
         print(send(host, f"LS {path}\n\n".encode(), all_data=True))
